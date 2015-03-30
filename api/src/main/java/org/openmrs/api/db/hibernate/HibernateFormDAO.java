@@ -20,6 +20,7 @@ import org.apache.commons.logging.LogFactory;
 import org.hibernate.Criteria;
 import org.hibernate.Query;
 import org.hibernate.SessionFactory;
+import org.hibernate.criterion.CriteriaSpecification;
 import org.hibernate.criterion.DetachedCriteria;
 import org.hibernate.criterion.MatchMode;
 import org.hibernate.criterion.Order;
@@ -439,11 +440,9 @@ public class HibernateFormDAO implements FormDAO {
 			}
 			
 			DetachedCriteria subquery = DetachedCriteria.forClass(FormField.class, "ff");
-			subquery.setProjection(Projections.count("ff.formFieldId"));
-			subquery.add(Restrictions.eqProperty("ff.form", "form"));
+			subquery.setProjection(Projections.property("ff.form.formId"));
 			subquery.add(Restrictions.in("ff.formFieldId", anyFormFieldIds));
-			
-			crit.add(Subqueries.lt(0L, subquery));
+			crit.add(Subqueries.propertyIn("form.formId", subquery));
 		}
 		
 		//select * from form where len(containingallformfields) = (select count(*) from form_field ff where ff.form_id = form_id and form_field_id in (containingallformfields);
@@ -454,12 +453,16 @@ public class HibernateFormDAO implements FormDAO {
 			for (FormField ff : containingAllFormFields) {
 				allFormFieldIds.add(ff.getFormFieldId());
 			}
-			DetachedCriteria subquery = DetachedCriteria.forClass(FormField.class, "ff");
-			subquery.setProjection(Projections.count("ff.formFieldId"));
-			subquery.add(Restrictions.eqProperty("ff.form", "form"));
-			subquery.add(Restrictions.in("ff.formFieldId", allFormFieldIds));
 			
-			crit.add(Subqueries.eq(Long.valueOf(containingAllFormFields.size()), subquery));
+			DetachedCriteria innerQuery = DetachedCriteria.forClass(Form.class, "innerForm");
+			innerQuery.setProjection(Projections.rowCount());
+			innerQuery.add(Restrictions.eqProperty("innerForm.formId", "form.formId"));
+			innerQuery.createAlias("innerForm.formFields", "formField").add(
+			    Restrictions.in("formField.formFieldId", allFormFieldIds)).setResultTransformer(
+			    CriteriaSpecification.DISTINCT_ROOT_ENTITY);
+			
+			crit.add(Subqueries.le(new Long(allFormFieldIds.size()), innerQuery));
+			;
 		}
 		
 		// get all forms (dupes included) that have this field on them

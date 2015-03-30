@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
@@ -55,6 +56,8 @@ public class FormServiceTest extends BaseContextSensitiveTest {
 	protected static final String INITIAL_FIELDS_XML = "org/openmrs/api/include/FormServiceTest-initialFieldTypes.xml";
 	
 	protected static final String FORM_FIELDS_XML = "org/openmrs/api/include/FormServiceTest-formFields.xml";
+	
+	protected static final String MULTIPLE_FORMS_FORM_FIELDS_XML = "org/openmrs/api/include/FormServiceTest-multipleForms-formFields.xml";
 	
 	protected static final String FORM_SAMPLE_RESOURCE = "org/openmrs/api/include/FormServiceTest-sampleResource.xslt";
 	
@@ -265,7 +268,7 @@ public class FormServiceTest extends BaseContextSensitiveTest {
 	public void getForms_shouldReturnFormsContainingAllFormFieldsInContainingAllFormFields() throws Exception {
 		
 		executeDataSet(INITIAL_FIELDS_XML);
-		executeDataSet("org/openmrs/api/include/FormServiceTest-formFields.xml");
+		executeDataSet(MULTIPLE_FORMS_FORM_FIELDS_XML);
 		
 		FormService formService = Context.getFormService();
 		
@@ -284,6 +287,95 @@ public class FormServiceTest extends BaseContextSensitiveTest {
 		
 		forms = formService.getForms(null, null, null, null, null, formFields, null);
 		assertEquals(0, forms.size());
+		
+		formFields = new HashSet<FormField>();
+		formFields.add(new FormField(3));
+		formFields.add(new FormField(5));
+		formFields.add(new FormField(7));
+		formFields.add(new FormField(8));
+		
+		forms = formService.getForms(null, null, null, null, null, formFields, null);
+		assertEquals(0, forms.size());
+		
+		formFields = new HashSet<FormField>();
+		formFields.add(new FormField(8));
+		
+		forms = formService.getForms(null, null, null, null, null, formFields, null);
+		assertEquals(1, forms.size());
+		
+	}
+	
+	/**
+	 * ensure that FormFields in containingAnyFormField parameter are considered when filtering the results
+	 * 
+	 * @see {@link FormService#getForms(String, Boolean, java.util.Collection, Boolean, java.util.Collection, java.util.Collection, java.util.Collection)
+
+	 */
+	@Test
+	@Verifies(value = "return forms that have any matching formFields in containingAnyFormField", method = "getForms(String,Boolean,Collection,Boolean,Collection,Collection,Collection)")
+	public void getForms_shouldReturnFormsThatHaveAnyMatchingFormFieldsInContainingAnyFormField() throws Exception {
+		
+		Double numberOfExpectedForms = new Double(2);
+		
+		executeDataSet(INITIAL_FIELDS_XML);
+		executeDataSet(MULTIPLE_FORMS_FORM_FIELDS_XML);
+		
+		FormService formService = Context.getFormService();
+		Collection<FormField> containingAnyFormField = makeFormFieldCollectionSample(formService);
+		
+		List<Form> formsReturned = formService.getForms(null, null, null, null, containingAnyFormField, null, null);
+		
+		Double currentNumberOfForms = new Double(formsReturned.size());
+		
+		assertEquals(numberOfExpectedForms, currentNumberOfForms);
+		assertTrue(verifyFilterConditionSuccess(containingAnyFormField, formsReturned));
+		
+	}
+	
+	private Collection<FormField> makeFormFieldCollectionSample(FormService formService) {
+		int formFieldAIdentifier = 2;
+		int formFieldBIdentifier = 9;
+		
+		Collection<FormField> containingAnyFormField = new ArrayList<FormField>();
+		FormField formFieldA = formService.getFormField(formFieldAIdentifier);
+		FormField formFieldB = formService.getFormField(formFieldBIdentifier);
+		containingAnyFormField.add(formFieldA);
+		containingAnyFormField.add(formFieldB);
+		return containingAnyFormField;
+	}
+	
+	private boolean verifyFilterConditionSuccess(Collection<FormField> containingAnyFormField, List<Form> formsReturned) {
+		boolean isMatched;
+		
+		for (Form form : formsReturned) {
+			if (!doesFormContainAnyFormField(form, containingAnyFormField)) {
+				isMatched = false;
+				return isMatched;
+			}
+		}
+		
+		isMatched = true;
+		return isMatched;
+	}
+	
+	private boolean doesFormContainAnyFormField(Form form, Collection<FormField> containingAnyFormField) {
+		boolean isWithin;
+		
+		for (FormField formField : containingAnyFormField) {
+			if (isFormFieldWithinForm(form, formField)) {
+				isWithin = true;
+				return isWithin;
+			}
+		}
+		
+		isWithin = false;
+		return isWithin;
+	}
+	
+	private boolean isFormFieldWithinForm(Form form, FormField formField) {
+		Set<FormField> formFields = form.getFormFields();
+		return formFields.contains(formField);
+		
 	}
 	
 	/**
